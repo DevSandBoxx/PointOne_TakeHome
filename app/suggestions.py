@@ -124,16 +124,54 @@ LIMIT 20
 
 
 def _rationale(semantic: float, fts: float, affinity: float, recency: float) -> str:
-    """Human-readable breakdown of the main components for the suggestion."""
-    recency_str = (
-        "No history" if abs(recency - 0.5) < 1e-6 else f"{round(recency * 100)}%"
-    )
-    return (
-        f"Semantic: {round(semantic * 100)}%; "
-        f"Keyword: {round(fts * 100)}%; "
-        f"Affinity: {round(affinity * 100)}%; "
-        f"Recency: {recency_str}"
-    )
+    """
+    Human-readable rationale built from qualitative bands instead of raw percentages.
+
+    This is a default template that explains *why* a suggestion was surfaced
+    in plain language, using the main signals we have.
+    """
+    reasons: list[str] = []
+
+    # Text similarity (semantic)
+    if semantic >= 0.75:
+        reasons.append("the narrative is highly similar to this matter")
+    elif semantic >= 0.5:
+        reasons.append("the narrative is a reasonable textual match for this matter")
+    else:
+        reasons.append("there is only a weak textual match to this matter")
+
+    # Keyword overlap (fts)
+    fts_norm = min(1.0, fts * 5.0)
+    if fts_norm >= 0.6:
+        reasons.append("the narrative shares strong keyword overlap with the matter description")
+    elif fts_norm >= 0.3:
+        reasons.append("the narrative shares some keywords with the matter description")
+
+    # Affinity (user × matter)
+    if affinity >= 0.8:
+        reasons.append("you have billed to this matter frequently in prior entries")
+    elif affinity >= 0.3:
+        reasons.append("you have worked on this matter before")
+
+    # Recency (user × matter time dimension)
+    if abs(recency - 0.5) < 1e-6:
+        reasons.append("we do not yet have history linking you to this matter")
+    elif recency >= 0.7:
+        reasons.append("you worked on this matter recently")
+    elif recency >= 0.3:
+        reasons.append("you have worked on this matter in the past, but not recently")
+
+    # Fallback if, for some reason, no reasons were added
+    if not reasons:
+        return "Suggested based on a combination of text similarity and your past work history."
+
+    # Build final sentence
+    if len(reasons) == 1:
+        detail = reasons[0]
+    else:
+        detail = ", ".join(reasons[:-1]) + f", and {reasons[-1]}"
+
+    return f"Suggested because {detail}."
 
 
 def get_suggestions_for_entry(entry: TimeEntry):
