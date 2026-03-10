@@ -1,0 +1,5 @@
+# Database URL for Postgres (used at startup to verify connection and pgvector).
+# Create a database (e.g. "pointone") in pgAdmin, then set:
+# DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/pointone
+
+DATABASE_URL=postgresql://postgres:pointone@localhost:5432/pointone
