@@ -24,10 +24,28 @@ class Suggestion(BaseModel):
     client_name: str = Field(..., description="The suggested client")
     matter_name: str = Field(..., description="The suggested matter")
     score: float = Field(..., ge=0, le=1, description="Confidence of the match (0–1)")
-    rationale: Optional[str] = Field(None, description="Human-readable explanation for the match")
+
+    # Raw component scores (0–1) used for explainability in UI
+    semantic_score: float = Field(..., ge=0, le=1, description="Semantic similarity score (0–1)")
+    keyword_score: float = Field(..., ge=0, le=1, description="Keyword score (normalized 0–1)")
+    affinity: float = Field(..., ge=0, le=1, description="User×matter affinity (0–1; neutral is 0.5)")
+    recency: float = Field(..., ge=0, le=1, description="User×matter recency (0–1; neutral is 0.5)")
+
+    # Template rationale (immediate)
+    rationale: Optional[str] = Field(None, description="Template rationale (immediate)")
     rationale_source: Literal["template", "ollama"] = Field(
         "template",
-        description="Where the rationale came from (template vs Ollama LLM).",
+        description="Where `rationale` came from (template vs Ollama).",
+    )
+
+    # LLM rationale (async hydration)
+    llm_status: Literal["disabled", "pending", "ready", "error"] = Field(
+        "disabled",
+        description="Async LLM hydration status for `llm_rationale`.",
+    )
+    llm_rationale: Optional[str] = Field(
+        None,
+        description="LLM-generated rationale (hydrated asynchronously).",
     )
 
 

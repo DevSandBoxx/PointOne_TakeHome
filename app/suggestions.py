@@ -243,120 +243,108 @@ def get_suggestions_for_entry(entry: TimeEntry):
             )
             rows = cur.fetchall()
 
-    suggestions = [
-        Suggestion(
-            client_id=row[0],
-            matter_id=row[1],
-            client_name=row[2],
-            matter_name=row[3],
-            score=float(row[16]),
-            rationale=_rationale(
-                semantic=float(row[8]),
-                fts=float(row[9]),
-                affinity=float(row[13]),
-                recency=float(row[14]),
-            ),
-            rationale_source="template",
+    suggestions = []
+    for row in rows:
+        semantic = float(row[8])
+        fts_raw = float(row[9])
+        keyword_norm = min(1.0, fts_raw * 5.0)
+        affinity = float(row[13])
+        recency = float(row[14])
+        combined = float(row[16])
+        suggestions.append(
+            Suggestion(
+                client_id=row[0],
+                matter_id=row[1],
+                client_name=row[2],
+                matter_name=row[3],
+                score=combined,
+                semantic_score=semantic,
+                keyword_score=keyword_norm,
+                affinity=affinity,
+                recency=recency,
+                rationale=_rationale(
+                    semantic=semantic,
+                    fts=fts_raw,
+                    affinity=affinity,
+                    recency=recency,
+                ),
+                rationale_source="template",
+                llm_status="pending" if get_ollama_config().enabled else "disabled",
+                llm_rationale=None,
+            )
         )
-        for row in rows
-    ]
 
-    # Optional: replace template rationales with Ollama-generated rationales (best-effort).
-    cfg = get_ollama_config()
-    if cfg.enabled and suggestions:
-        try:
-            def _tokens(s: str) -> set[str]:
-                import re
-                # simple, deterministic tokenization for explanation only
-                return {t for t in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(t) >= 3}
-
-            narrative_terms = sorted(_tokens(narrative_clean))[:12]
-            candidates = [
-                {
-                    "client_id": r[0],
-                    "matter_id": r[1],
-                    "client_name": r[2],
-                    "matter_name": r[3],
-                    "matter_description": r[4] or "",
-                    "practice_area": r[5] or "",
-                    "matter_type": r[6] or "",
-                    "related_keywords": list(r[7] or []),
-                    "narrative_terms": narrative_terms,
-                    "keyword_overlap": sorted(
-                        _tokens(" ".join(list(r[7] or []))) & _tokens(narrative_clean)
-                    )[:10],
-                    # Provide both numeric signals and coarse bands so the model can
-                    # reference percentages but still speak naturally.
-                    "semantic_score": float(r[8]),  # 0..1
-                    "fts_score": float(r[9]),  # raw ts_rank (often small)
-                    "fts_norm": min(1.0, float(r[9]) * 5.0),  # normalized like ranking
-                    "accept_count": int(r[10]),
-                    "reject_count": int(r[11]),
-                    "no_prior_history": (int(r[10]) + int(r[11])) < 3,
-                    "affinity": float(r[13]),  # 0..1 (or neutral 0.5)
-                    "recency": float(r[14]),  # 0..1 (or neutral 0.5)
-                    "rejection_factor": float(r[15]),
-                    "combined_score": float(r[16]),
-                    "confidence_band": (
-                        "high"
-                        if float(r[16]) >= 0.75
-                        else ("medium" if float(r[16]) >= 0.55 else "low")
-                    ),
-                    "semantic_band": "high" if float(r[8]) >= 0.75 else ("medium" if float(r[8]) >= 0.5 else "low"),
-                    "keyword_band": (
-                        "high"
-                        if min(1.0, float(r[9]) * 5.0) >= 0.6
-                        else ("medium" if min(1.0, float(r[9]) * 5.0) >= 0.3 else "low")
-                    ),
-                }
-                for r in rows
-            ]
-            prompt = build_batch_prompt(
-                user_id=entry.user_id,
-                entry_id=entry.entry_id,
-                narrative=narrative_clean,
-                candidates=candidates,
-            )
-            debug = os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
-            if debug:
-                logger.info(
-                    "Ollama rationale attempt (model=%s url=%s timeout_s=%s candidates=%d prompt_chars=%d)",
-                    cfg.model,
-                    cfg.base_url,
-                    cfg.timeout_s,
-                    len(candidates),
-                    len(prompt),
-                )
-            text = ollama_generate(
-                base_url=cfg.base_url,
-                model=cfg.model,
-                prompt=prompt,
-                timeout_s=cfg.timeout_s,
-            )
-            if debug:
-                logger.info("Ollama raw response (first 200 chars): %r", text[:200])
-            mapping = parse_rationales_json(text)
-            if debug:
-                logger.info("Ollama parsed rationales: %d", len(mapping))
-            for s in suggestions:
-                llm_r = mapping.get((s.client_id, s.matter_id))
-                if llm_r:
-                    s.rationale = llm_r
-                    s.rationale_source = "ollama"
-        except Exception as e:
-            # Keep template rationales on any failure (Ollama down, bad JSON, etc).
-            if os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
-                logger.exception(
-                    "Ollama rationale fallback (model=%s url=%s timeout_s=%s): %s",
-                    cfg.model,
-                    cfg.base_url,
-                    cfg.timeout_s,
-                    e,
-                )
-            pass
+    # NOTE: LLM rationales are hydrated asynchronously via a separate endpoint.
 
     # Low-confidence heuristic: if the top suggestion is below threshold, warn.
     # This threshold is a starting point and should be tuned with real feedback.
     LOW_CONFIDENCE_THRESHOLD = 0.55
     low_confidence = (not suggestions) or (suggestions[0].score < LOW_CONFIDENCE_THRESHOLD)
-    return suggestions, low_confidence
+    return suggestions, low_confidence, rows
+
+
+def generate_ollama_rationales_for_rows(entry: TimeEntry, rows) -> dict[tuple[str, str], str]:
+    """
+    Generate Ollama rationales for an existing suggestion result set (rows from SUGGESTIONS_QUERY).
+    Returns mapping (client_id, matter_id) -> rationale.
+    """
+    cfg = get_ollama_config()
+    if not cfg.enabled or not rows:
+        return {}
+
+    def _tokens(s: str) -> set[str]:
+        import re
+        return {t for t in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(t) >= 3}
+
+    narrative_clean = entry.narrative.strip() or " "
+    narrative_terms = sorted(_tokens(narrative_clean))[:12]
+    candidates = [
+        {
+            "client_id": r[0],
+            "matter_id": r[1],
+            "client_name": r[2],
+            "matter_name": r[3],
+            "matter_description": r[4] or "",
+            "practice_area": r[5] or "",
+            "matter_type": r[6] or "",
+            "related_keywords": list(r[7] or []),
+            "narrative_terms": narrative_terms,
+            "keyword_overlap": sorted(_tokens(" ".join(list(r[7] or []))) & _tokens(narrative_clean))[:10],
+            "semantic_score": float(r[8]),
+            "fts_score": float(r[9]),
+            "fts_norm": min(1.0, float(r[9]) * 5.0),
+            "accept_count": int(r[10]),
+            "reject_count": int(r[11]),
+            "no_prior_history": (int(r[10]) + int(r[11])) < 3,
+            "affinity": float(r[13]),
+            "recency": float(r[14]),
+            "rejection_factor": float(r[15]),
+            "combined_score": float(r[16]),
+            "confidence_band": (
+                "high" if float(r[16]) >= 0.75 else ("medium" if float(r[16]) >= 0.55 else "low")
+            ),
+        }
+        for r in rows
+    ]
+
+    prompt = build_batch_prompt(
+        user_id=entry.user_id,
+        entry_id=entry.entry_id,
+        narrative=narrative_clean,
+        candidates=candidates,
+    )
+
+    debug = os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+    if debug:
+        logger.info(
+            "Ollama hydration attempt (model=%s url=%s timeout_s=%s candidates=%d prompt_chars=%d)",
+            cfg.model,
+            cfg.base_url,
+            cfg.timeout_s,
+            len(candidates),
+            len(prompt),
+        )
+    text = ollama_generate(base_url=cfg.base_url, model=cfg.model, prompt=prompt, timeout_s=cfg.timeout_s)
+    if debug:
+        logger.info("Ollama hydration raw response (first 200 chars): %r", text[:200])
+    return parse_rationales_json(text)
