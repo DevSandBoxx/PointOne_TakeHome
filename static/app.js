@@ -9,40 +9,22 @@
  */
 
 /**
- * Fetch classification suggestions for a time entry.
- * Abstracted: replace with real API call when backend is ready.
+ * Fetch classification suggestions for a time entry (Phase 2: real API).
  * @param {Object} entry - Time entry payload (snake_case for API)
  * @returns {Promise<ClassificationSuggestion[]>}
  */
 async function getSuggestions(entry) {
-  // When backend is ready, use:
-  // const res = await fetch('/suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
-  // if (!res.ok) throw new Error(await res.text());
-  // const data = await res.json();
-  // return data.suggestions;
-
-  // Mock delay and data
-  await new Promise((r) => setTimeout(r, 600));
-  return [
-    {
-      client_name: 'Smith & Associates LLC',
-      matter_name: 'Contract Dispute - Johnson Supply Agreement',
-      score: 0.92,
-      rationale: 'Narrative mentions "Smith" and "contract dispute"; strong match to this matter.',
-    },
-    {
-      client_name: 'Acme Corporation',
-      matter_name: 'Securities Investigation - SEC Inquiry',
-      score: 0.71,
-      rationale: 'Keywords overlap with regulatory and investigation matter.',
-    },
-    {
-      client_name: 'Northgate Holdings Inc.',
-      matter_name: 'IP Licensing - Patent Portfolio',
-      score: 0.58,
-      rationale: 'Possible research context; lower confidence.',
-    },
-  ];
+  const res = await fetch('/suggestions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.suggestions;
 }
 
 function $(id) {
