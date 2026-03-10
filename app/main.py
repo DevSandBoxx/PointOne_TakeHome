@@ -72,8 +72,9 @@ def get_suggestions(entry: TimeEntry) -> SuggestionsResponse:
     """
     Accept a time entry and return a ranked list of client/matter suggestions.
 
-    Uses narrative embedding (sentence-transformers) and full-text search (tsvector)
-    in a single Postgres query; combines semantic and keyword scores.
+    Uses narrative embedding (sentence-transformers), full-text search (tsvector),
+    and user × matter feedback (affinity, recency, rejection penalty) in a single
+    Postgres query; combines these into a single confidence score.
     """
-    suggestions = get_suggestions_for_entry(entry.narrative)
+    suggestions = get_suggestions_for_entry(entry)
     return SuggestionsResponse(suggestions=suggestions)
