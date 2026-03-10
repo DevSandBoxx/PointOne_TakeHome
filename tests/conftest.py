@@ -67,5 +67,11 @@ def sample_suggestion():
         client_name="Acme Corporation",
         matter_name="Securities Investigation",
         score=0.85,
+        semantic_score=0.8,
+        keyword_score=0.3,
+        affinity=0.5,
+        recency=0.5,
         rationale="Suggested because the narrative is highly similar to this matter.",
+        llm_status="pending",
+        llm_rationale=None,
     )

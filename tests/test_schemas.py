@@ -76,7 +76,12 @@ class TestSuggestion:
             client_name="Client A",
             matter_name="Matter B",
             score=0.75,
+            semantic_score=0.7,
+            keyword_score=0.2,
+            affinity=0.5,
+            recency=0.5,
             rationale="Good match.",
+            llm_status="pending",
         )
         assert s.client_id == "c1"
         assert s.matter_id == "m1"
@@ -90,6 +95,11 @@ class TestSuggestion:
             client_name="A",
             matter_name="B",
             score=0.0,
+            semantic_score=0.0,
+            keyword_score=0.0,
+            affinity=0.5,
+            recency=0.5,
+            llm_status="disabled",
         )
         Suggestion(
             client_id="c1",
@@ -97,6 +107,11 @@ class TestSuggestion:
             client_name="A",
             matter_name="B",
             score=1.0,
+            semantic_score=1.0,
+            keyword_score=1.0,
+            affinity=1.0,
+            recency=1.0,
+            llm_status="disabled",
         )
 
     def test_score_below_zero_raises(self):
@@ -107,6 +122,11 @@ class TestSuggestion:
                 client_name="A",
                 matter_name="B",
                 score=-0.1,
+                semantic_score=0.0,
+                keyword_score=0.0,
+                affinity=0.5,
+                recency=0.5,
+                llm_status="disabled",
             )
 
     def test_score_above_one_raises(self):
@@ -117,6 +137,11 @@ class TestSuggestion:
                 client_name="A",
                 matter_name="B",
                 score=1.1,
+                semantic_score=0.0,
+                keyword_score=0.0,
+                affinity=0.5,
+                recency=0.5,
+                llm_status="disabled",
             )
 
 
@@ -136,6 +161,11 @@ class TestSuggestionsResponse:
                 client_name="C1",
                 matter_name="M1",
                 score=0.8,
+                semantic_score=0.7,
+                keyword_score=0.2,
+                affinity=0.5,
+                recency=0.5,
+                llm_status="pending",
             ),
         ]
         r = SuggestionsResponse(low_confidence=False, suggestions=suggestions)

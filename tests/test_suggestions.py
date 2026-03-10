@@ -76,12 +76,14 @@ class TestGetSuggestionsForEntry:
         )
 
     @patch("pgvector.psycopg.register_vector")
+    @patch("app.suggestions.get_ollama_config")
     @patch("app.suggestions.get_embedding")
     @patch("psycopg.connect")
     def test_returns_suggestions_and_low_confidence_flag(
-        self, mock_connect, mock_get_embedding, _mock_register_vector, entry
+        self, mock_connect, mock_get_embedding, mock_get_cfg, _mock_register_vector, entry
     ):
         import numpy as np
+        mock_get_cfg.return_value.enabled = False
         mock_get_embedding.return_value = np.zeros(384, dtype=np.float32)
         mock_cursor = MagicMock()
         # One row: client_id, matter_id, client_name, matter_name,
@@ -113,21 +115,25 @@ class TestGetSuggestionsForEntry:
         mock_connect.return_value.__enter__.return_value = mock_conn
         mock_connect.return_value.__exit__.return_value = False
 
-        suggestions, low_confidence = get_suggestions_for_entry(entry)
+        suggestions, low_confidence, _rows = get_suggestions_for_entry(entry)
         assert len(suggestions) == 1
         assert suggestions[0].client_id == "cli_001"
         assert suggestions[0].matter_id == "mat_001"
         assert suggestions[0].client_name == "Acme Corp"
         assert suggestions[0].score == 0.45
+        assert suggestions[0].semantic_score == 0.7
+        assert suggestions[0].keyword_score == 0.5
         assert low_confidence is True
 
     @patch("pgvector.psycopg.register_vector")
+    @patch("app.suggestions.get_ollama_config")
     @patch("app.suggestions.get_embedding")
     @patch("psycopg.connect")
     def test_high_score_sets_low_confidence_false(
-        self, mock_connect, mock_get_embedding, _mock_register_vector, entry
+        self, mock_connect, mock_get_embedding, mock_get_cfg, _mock_register_vector, entry
     ):
         import numpy as np
+        mock_get_cfg.return_value.enabled = False
         mock_get_embedding.return_value = np.zeros(384, dtype=np.float32)
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [
@@ -157,15 +163,17 @@ class TestGetSuggestionsForEntry:
         mock_connect.return_value.__enter__.return_value = mock_conn
         mock_connect.return_value.__exit__.return_value = False
 
-        suggestions, low_confidence = get_suggestions_for_entry(entry)
+        suggestions, low_confidence, _rows = get_suggestions_for_entry(entry)
         assert low_confidence is False
         assert suggestions[0].score == 0.72
 
     @patch("pgvector.psycopg.register_vector")
+    @patch("app.suggestions.get_ollama_config")
     @patch("app.suggestions.get_embedding")
     @patch("psycopg.connect")
-    def test_empty_results(self, mock_connect, mock_get_embedding, _mock_register_vector, entry):
+    def test_empty_results(self, mock_connect, mock_get_embedding, mock_get_cfg, _mock_register_vector, entry):
         import numpy as np
+        mock_get_cfg.return_value.enabled = False
         mock_get_embedding.return_value = np.zeros(384, dtype=np.float32)
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = []
@@ -175,6 +183,6 @@ class TestGetSuggestionsForEntry:
         mock_connect.return_value.__enter__.return_value = mock_conn
         mock_connect.return_value.__exit__.return_value = False
 
-        suggestions, low_confidence = get_suggestions_for_entry(entry)
+        suggestions, low_confidence, _rows = get_suggestions_for_entry(entry)
         assert suggestions == []
         assert low_confidence is True

@@ -35,10 +35,16 @@ class TestSuggestionsEndpoint:
                 client_name="Acme Corp",
                 matter_name="Securities Matter",
                 score=0.82,
+                semantic_score=0.7,
+                keyword_score=0.2,
+                affinity=0.5,
+                recency=0.5,
                 rationale="Suggested because the narrative is highly similar to this matter.",
+                llm_status="pending",
+                llm_rationale=None,
             ),
         ]
-        with patch("app.main.get_suggestions_for_entry", return_value=(stub_suggestions, False)):
+        with patch("app.main.get_suggestions_for_entry", return_value=(stub_suggestions, False, [])):
             r = client.post("/suggestions", json=sample_time_entry)
         assert r.status_code == 200
         data = r.json()
@@ -50,9 +56,19 @@ class TestSuggestionsEndpoint:
         assert data["suggestions"][0]["matter_name"] == "Securities Matter"
         assert data["suggestions"][0]["score"] == 0.82
         assert "rationale" in data["suggestions"][0]
+        assert "semantic_score" in data["suggestions"][0]
+        assert "keyword_score" in data["suggestions"][0]
+        assert "affinity" in data["suggestions"][0]
+        assert "recency" in data["suggestions"][0]
+        assert "llm_status" in data["suggestions"][0]
+
+    def test_llm_poll_missing(self, client):
+        r = client.get("/suggestions/llm", params={"user_id": "u", "entry_id": "e"})
+        assert r.status_code == 200
+        assert r.json()["status"] in {"missing", "pending", "ready", "error"}
 
     def test_low_confidence_true_when_flag_set(self, client, sample_time_entry):
-        with patch("app.main.get_suggestions_for_entry", return_value=([], True)):
+        with patch("app.main.get_suggestions_for_entry", return_value=([], True, [])):
             r = client.post("/suggestions", json=sample_time_entry)
         assert r.status_code == 200
         assert r.json()["low_confidence"] is True
