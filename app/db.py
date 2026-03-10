@@ -58,3 +58,21 @@ def ensure_feedback_table() -> None:
                 )
             """)
         conn.commit()
+
+
+def record_feedback(user_id: str, entry_id: str, client_id: str, matter_id: str, action: str) -> int:
+    """Insert a feedback row and return the new id."""
+    url = get_database_url()
+    with psycopg.connect(url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO feedback (user_id, entry_id, client_id, matter_id, action)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (user_id, entry_id, client_id, matter_id, action),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return row[0]

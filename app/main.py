@@ -13,8 +13,8 @@ load_dotenv()
 APP_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = APP_ROOT / "static"
 
-from app.db import check_connection
-from app.schemas import SuggestionsResponse, TimeEntry
+from app.db import check_connection, record_feedback
+from app.schemas import FeedbackRequest, SuggestionsResponse, TimeEntry
 from app.seed_matters import run_seed_matters_background
 from app.suggestions import get_suggestions_for_entry
 
@@ -52,6 +52,19 @@ def serve_ui():
 def health():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.post("/feedback", status_code=201)
+def post_feedback(feedback: FeedbackRequest):
+    """Record accept or reject feedback for a suggestion."""
+    feedback_id = record_feedback(
+        user_id=feedback.user_id,
+        entry_id=feedback.entry_id,
+        client_id=feedback.client_id,
+        matter_id=feedback.matter_id,
+        action=feedback.action,
+    )
+    return {"id": feedback_id, "status": "recorded"}
 
 
 @app.post("/suggestions", response_model=SuggestionsResponse)

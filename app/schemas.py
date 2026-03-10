@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,4 +31,17 @@ class SuggestionsResponse(BaseModel):
     suggestions: list[Suggestion] = Field(
         ...,
         description="Ranked list of candidate client/matter assignments",
+    )
+
+
+class FeedbackRequest(BaseModel):
+    """Accept or reject a suggestion for a time entry."""
+
+    user_id: str = Field(..., description="The timekeeper submitting the feedback")
+    entry_id: str = Field(..., description="Time entry identifier")
+    client_id: str = Field(..., description="Client ID of the suggestion")
+    matter_id: str = Field(..., description="Matter ID of the suggestion")
+    action: Literal["accepted", "rejected"] = Field(
+        ...,
+        description="Whether the suggestion was accepted or rejected",
     )
