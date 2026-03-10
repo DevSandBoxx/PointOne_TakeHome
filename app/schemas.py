@@ -30,6 +30,10 @@ class Suggestion(BaseModel):
 class SuggestionsResponse(BaseModel):
     """Ranked list of client/matter suggestions for a time entry."""
 
+    low_confidence: bool = Field(
+        ...,
+        description="True when no candidate is a strong match; UI should warn user.",
+    )
     suggestions: list[Suggestion] = Field(
         ...,
         description="Ranked list of candidate client/matter assignments",

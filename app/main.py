@@ -76,5 +76,5 @@ def get_suggestions(entry: TimeEntry) -> SuggestionsResponse:
     and user × matter feedback (affinity, recency, rejection penalty) in a single
     Postgres query; combines these into a single confidence score.
     """
-    suggestions = get_suggestions_for_entry(entry)
-    return SuggestionsResponse(suggestions=suggestions)
+    suggestions, low_confidence = get_suggestions_for_entry(entry)
+    return SuggestionsResponse(low_confidence=low_confidence, suggestions=suggestions)
