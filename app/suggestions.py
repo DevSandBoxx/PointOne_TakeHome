@@ -117,13 +117,17 @@ SELECT
     affinity,
     recency,
     rejection_factor,
-    (
-        (
-            0.6 * semantic_score
-          + 0.25 * LEAST(1.0, fts_score * 5.0)
-          + 0.1 * affinity
-          + 0.05 * recency
-        ) * rejection_factor
+    LEAST(
+        1.0,
+        GREATEST(
+            0.0,
+            (
+                0.6 * semantic_score
+              + 0.25 * LEAST(1.0, fts_score * 5.0)
+              + 0.1 * affinity
+              + 0.05 * recency
+            ) * rejection_factor
+        )
     ) AS combined_score
 FROM joined
 ORDER BY combined_score DESC
