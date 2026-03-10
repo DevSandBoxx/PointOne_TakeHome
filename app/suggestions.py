@@ -59,8 +59,16 @@ joined AS (
         t.matter_name,
         t.semantic_score,
         t.fts_score,
-        -- affinity: saturating at 1.0 after ~5 accepted events
-        COALESCE(LEAST(1.0, fa.accept_count::float / 5.0), 0.0) AS affinity,
+        -- affinity: only when there is enough history; otherwise neutral 0.5
+        COALESCE(
+            CASE
+                WHEN (fa.accept_count + fa.reject_count) >= 3 THEN
+                    LEAST(1.0, fa.accept_count::float / 5.0)
+                ELSE
+                    0.5
+            END,
+            0.5
+        ) AS affinity,
         -- recency: exp(-days_since_last_event / 30) when there is enough history,
         -- otherwise neutral 0.5 (no history or too few events).
         COALESCE(
@@ -148,7 +156,10 @@ def _rationale(semantic: float, fts: float, affinity: float, recency: float) -> 
         reasons.append("the narrative shares some keywords with the matter description")
 
     # Affinity (user × matter)
-    if affinity >= 0.8:
+    if abs(affinity - 0.5) < 1e-6:
+        # neutral / no or too little history — handled by recency text below
+        pass
+    elif affinity >= 0.8:
         reasons.append("you have billed to this matter frequently in prior entries")
     elif affinity >= 0.3:
         reasons.append("you have worked on this matter before")

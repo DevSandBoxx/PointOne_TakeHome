@@ -56,7 +56,12 @@
     "PracticeArea": "Corporate",
     "MatterType": "Transactional",
     "Status": "open",
-    "RelatedKeywords": ["real estate", "warehouse", "acquisition", "commercial"],
+    "RelatedKeywords": [
+      "real estate",
+      "warehouse",
+      "acquisition",
+      "commercial"
+    ],
     "InvolvedTimekeepers": ["tk_103", "tk_105"]
   },
   {
@@ -238,5 +243,23 @@
     "Status": "open",
     "RelatedKeywords": ["bad faith", "insurance", "coverage", "Williams"],
     "InvolvedTimekeepers": ["tk_102", "tk_104"]
+  },
+  {
+    "ClientId": "cli_011",
+    "ClientName": "Aurora Ventures LLC",
+    "MatterId": "mat_021",
+    "MatterName": "Venture Financing – Series A",
+    "MatterDescription": "Series A equity financing for growth-stage portfolio company; term sheet negotiation, capitalization table review, and closing deliverables.",
+    "PracticeArea": "Corporate",
+    "MatterType": "Transactional",
+    "Status": "open",
+    "RelatedKeywords": [
+      "Series A",
+      "venture financing",
+      "term sheet",
+      "preferred stock",
+      "cap table"
+    ],
+    "InvolvedTimekeepers": ["tk_101", "tk_103"]
   }
 ]

@@ -247,9 +247,27 @@ def run_seed_matters_background(json_path: Path | None = None) -> None:
 
 if __name__ == "__main__":
     import sys
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+
     logging.basicConfig(level=logging.INFO)
-    path = get_default_matters_json_path() if len(sys.argv) < 2 else Path(sys.argv[1])
-    if "--rebuild" in sys.argv:
+
+    # Simple CLI:
+    #   python -m app.seed_matters                -> seed from default data/matters.json
+    #   python -m app.seed_matters path/to.json   -> seed from given JSON
+    #   python -m app.seed_matters --rebuild      -> drop + rebuild from default JSON
+    #   python -m app.seed_matters path/to.json --rebuild -> drop + rebuild from given JSON
+    argv = sys.argv[1:]
+    rebuild_flag = "--rebuild" in argv
+    args = [a for a in argv if a != "--rebuild"]
+
+    if args:
+        path = Path(args[0])
+    else:
+        path = get_default_matters_json_path()
+
+    if rebuild_flag:
         n = rebuild_matters(path)
         print(f"Rebuilt matters index: {n} rows from {path}")
     else:
