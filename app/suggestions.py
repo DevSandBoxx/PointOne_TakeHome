@@ -1,6 +1,6 @@
 """
-Phase 2: fetch ranked client/matter suggestions using one Postgres query.
-Combines semantic (pgvector) and full-text (tsvector) scores.
+Phase 2: ranked client/matter suggestions via one Postgres query (semantic + FTS).
+See docs/SUGGESTIONS_SCORING.md for what the query returns and how scores are combined.
 """
 
 from app.db import get_database_url
@@ -21,21 +21,19 @@ ORDER BY (1 - (embedding <=> %s)) DESC, ts_rank(search_vector, plainto_tsquery('
 LIMIT 20
 """
 
-# Weights for combining semantic and FTS into a single 0–1 score.
-# FTS ts_rank is often small (e.g. 0.01–0.2), so we scale it before blending.
 SEMANTIC_WEIGHT = 0.65
 FTS_WEIGHT = 0.35
-FTS_SCALE = 5.0  # scale raw ts_rank so typical values contribute (min(1, fts * FTS_SCALE))
+FTS_SCALE = 5.0
 
 
 def _combined_score(semantic: float, fts: float) -> float:
-    """Single 0–1 score from semantic and FTS scores."""
+    """Blend semantic and FTS into a single 0–1 score (see module docstring)."""
     fts_norm = min(1.0, float(fts) * FTS_SCALE)
     return round(SEMANTIC_WEIGHT * semantic + FTS_WEIGHT * fts_norm, 4)
 
 
 def _rationale(semantic: float, fts: float) -> str:
-    """Human-readable breakdown for the suggestion."""
+    """Human-readable breakdown of the raw scores for the suggestion."""
     return f"Semantic: {round(semantic * 100)}%; Keyword: {round(fts * 100)}%"
 
 
