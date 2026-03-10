@@ -1,63 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Time Entry — Client/Matter Suggestions</title>
-  <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-  <div class="layout">
-    <header class="header">
-      <h1>Time Entry</h1>
-      <p class="subtitle">Enter work details and get client/matter classification suggestions.</p>
-    </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Time Entry — Client/Matter Suggestions</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="header">
+        <h1>Time Entry</h1>
+        <p class="subtitle">
+          Enter work details and get client/matter classification suggestions.
+        </p>
+      </header>
 
-    <main class="main">
-      <section class="card entry-form-card">
-        <h2>Entry details</h2>
-        <form id="entry-form" class="entry-form">
-          <div class="field">
-            <label for="narrative">Work description <span class="required">*</span></label>
-            <textarea id="narrative" name="narrative" rows="4" placeholder="e.g. Research and memo on Smith contract dispute; document review." required></textarea>
-          </div>
-          <div class="field-row">
+      <main class="main">
+        <section class="card entry-form-card">
+          <h2>Entry details</h2>
+          <form id="entry-form" class="entry-form">
             <div class="field">
-              <label for="hours">Hours</label>
-              <input type="number" id="hours" name="hours" min="0" step="0.25" value="1" />
+              <label for="narrative"
+                >Work description <span class="required">*</span></label
+              >
+              <textarea
+                id="narrative"
+                name="narrative"
+                rows="4"
+                placeholder="e.g. Research and memo on Smith contract dispute; document review."
+                required
+              ></textarea>
             </div>
-            <div class="field">
-              <label for="entry-date">Date</label>
-              <input type="date" id="entry-date" name="entry_date" />
+            <div class="field-row">
+              <div class="field">
+                <label for="hours">Hours</label>
+                <input
+                  type="number"
+                  id="hours"
+                  name="hours"
+                  min="0"
+                  step="0.25"
+                  value="1"
+                />
+              </div>
+              <div class="field">
+                <label for="entry-date">Date</label>
+                <input type="date" id="entry-date" name="entry_date" />
+              </div>
             </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="client-name">Current client (optional)</label>
-              <input type="text" id="client-name" name="client_name" placeholder="Pre-filled or leave blank" />
+            <div class="field-row">
+              <div class="field">
+                <label for="client-name">Current client (optional)</label>
+                <input
+                  type="text"
+                  id="client-name"
+                  name="client_name"
+                  placeholder="Pre-filled or leave blank"
+                />
+              </div>
+              <div class="field">
+                <label for="matter-name">Current matter (optional)</label>
+                <input
+                  type="text"
+                  id="matter-name"
+                  name="matter_name"
+                  placeholder="Pre-filled or leave blank"
+                />
+              </div>
             </div>
-            <div class="field">
-              <label for="matter-name">Current matter (optional)</label>
-              <input type="text" id="matter-name" name="matter_name" placeholder="Pre-filled or leave blank" />
+            <div class="form-actions">
+              <button type="submit" id="submit-btn" class="btn btn-primary">
+                Get suggestions
+              </button>
             </div>
-          </div>
-          <div class="form-actions">
-            <button type="submit" id="submit-btn" class="btn btn-primary">Get suggestions</button>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
 
-      <section class="card suggestions-card" id="suggestions-section" aria-live="polite">
-        <h2>Classification suggestions</h2>
-        <div id="suggestions-state" class="suggestions-state">
-          <p id="suggestions-empty" class="muted">Submit an entry above to see ranked client/matter suggestions.</p>
-          <p id="suggestions-loading" class="loading hidden">Loading suggestions…</p>
-          <p id="suggestions-error" class="error hidden"></p>
-        </div>
-        <ul id="suggestions-list" class="suggestions-list hidden" role="list"></ul>
-      </section>
-    </main>
-  </div>
-  <script src="/static/app.js"></script>
-</body>
+        <section
+          class="card suggestions-card"
+          id="suggestions-section"
+          aria-live="polite"
+        >
+          <h2>Classification suggestions</h2>
+          <div id="suggestions-state" class="suggestions-state">
+            <p id="suggestions-empty" class="muted">
+              Submit an entry above to see ranked client/matter suggestions.
+            </p>
+            <p id="suggestions-loading" class="loading hidden">
+              Loading suggestions…
+            </p>
+            <p id="suggestions-error" class="error hidden"></p>
+          </div>
+          <ul
+            id="suggestions-list"
+            class="suggestions-list hidden"
+            role="list"
+          ></ul>
+        </section>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
 </html>
