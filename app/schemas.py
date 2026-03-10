@@ -25,6 +25,10 @@ class Suggestion(BaseModel):
     matter_name: str = Field(..., description="The suggested matter")
     score: float = Field(..., ge=0, le=1, description="Confidence of the match (0–1)")
     rationale: Optional[str] = Field(None, description="Human-readable explanation for the match")
+    rationale_source: Literal["template", "ollama"] = Field(
+        "template",
+        description="Where the rationale came from (template vs Ollama LLM).",
+    )
 
 
 class SuggestionsResponse(BaseModel):

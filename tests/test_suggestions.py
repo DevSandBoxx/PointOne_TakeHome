@@ -85,15 +85,22 @@ class TestGetSuggestionsForEntry:
         mock_get_embedding.return_value = np.zeros(384, dtype=np.float32)
         mock_cursor = MagicMock()
         # One row: client_id, matter_id, client_name, matter_name,
-        # semantic_score, fts_score, affinity, recency, rejection_factor, combined_score
+        # plus metadata and feedback counts (see SUGGESTIONS_QUERY SELECT).
         mock_cursor.fetchall.return_value = [
             (
                 "cli_001",
                 "mat_001",
                 "Acme Corp",
                 "Securities Matter",
+                "Matter description",
+                "Litigation",
+                "Dispute",
+                ["SEC", "disclosure"],
                 0.7,
                 0.1,
+                0,
+                0,
+                None,
                 0.5,
                 0.5,
                 1.0,
@@ -129,8 +136,15 @@ class TestGetSuggestionsForEntry:
                 "mat_001",
                 "Acme Corp",
                 "Securities Matter",
+                "Matter description",
+                "Litigation",
+                "Dispute",
+                ["SEC", "disclosure"],
                 0.9,
                 0.2,
+                0,
+                0,
+                None,
                 0.5,
                 0.5,
                 1.0,

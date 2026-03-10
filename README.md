@@ -280,3 +280,31 @@ Coverage report:
 ```bash
 python -m pytest tests/ -v --cov=app --cov-report=term-missing
 ```
+
+---
+
+## 10. Ollama rationales (LLM explanations)
+
+By default, the API returns a **template-based** rationale.
+If you’ve installed Ollama, you can optionally have the backend generate rationales via a single local Ollama call per `/suggestions` request (best-effort; falls back to template if Ollama is down or returns invalid JSON).
+
+1. Start Ollama:
+
+```bash
+ollama serve
+```
+
+2. Pull a model (example):
+
+```bash
+ollama pull llama3.1
+```
+
+3. Enable in `.env`:
+
+```env
+OLLAMA_RATIONALE_ENABLED=true
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+OLLAMA_TIMEOUT_S=4.0
+```

@@ -253,6 +253,11 @@ body {
   border-radius: 4px;
 }
 
+.suggestion-meta {
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
 .suggestion-rationale {
   font-size: 0.875rem;
   color: var(--text-muted);

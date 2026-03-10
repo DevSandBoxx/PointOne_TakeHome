@@ -3,3 +3,15 @@
 # DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/pointone
 
 DATABASE_URL=postgresql://postgres:pointone@localhost:5432/pointone
+
+# Optional: Ollama rationales (LLM-generated explanations)
+# 1) Install Ollama, run: `ollama serve`
+# 2) Pull a model, e.g.: `ollama pull llama3.1`
+OLLAMA_RATIONALE_ENABLED=false
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+OLLAMA_TIMEOUT_S=4.0
+# Optional: log Ollama failures + fallback reasons
+OLLAMA_DEBUG=false
+# Optional: ask Ollama to enforce JSON-only output (recommended)
+OLLAMA_FORCE_JSON=true

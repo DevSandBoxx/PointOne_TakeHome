@@ -5,7 +5,7 @@
 
 /**
  * Classification suggestion (matches backend Suggestion schema).
- * @typedef {{ client_id: string, matter_id: string, client_name: string, matter_name: string, score: number, rationale?: string }} ClassificationSuggestion
+ * @typedef {{ client_id: string, matter_id: string, client_name: string, matter_name: string, score: number, rationale?: string, rationale_source?: 'template'|'ollama' }} ClassificationSuggestion
  */
 
 /**
@@ -76,11 +76,14 @@ function renderSuggestion(suggestion, index, entry) {
   li.dataset.entryId = entry.entry_id;
 
   const clientMatter = `${suggestion.client_name} — ${suggestion.matter_name}`;
+  const source =
+    suggestion.rationale_source === "ollama" ? "Ollama" : "Template";
   li.innerHTML = `
     <div class="suggestion-header">
       <span class="suggestion-client-matter">${escapeHtml(clientMatter)}</span>
       <span class="suggestion-score">${formatScore(suggestion.score)}</span>
     </div>
+    <div class="suggestion-meta muted">Rationale: ${escapeHtml(source)}</div>
     ${suggestion.rationale ? `<p class="suggestion-rationale">${escapeHtml(suggestion.rationale)}</p>` : ""}
     <div class="suggestion-actions">
       <button type="button" class="btn btn-sm btn-accept" data-action="accept">Accept</button>

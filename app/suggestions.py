@@ -6,9 +6,20 @@ See docs/SUGGESTIONS_SCORING.md for what the base query returns and how scores
 are combined; this module extends that with user × matter history.
 """
 
+import logging
+import os
+
 from app.db import get_database_url
 from app.embedding import get_embedding
 from app.schemas import Suggestion, TimeEntry
+from app.ollama_rationale import (
+    build_batch_prompt,
+    get_ollama_config,
+    ollama_generate,
+    parse_rationales_json,
+)
+
+logger = logging.getLogger(__name__)
 
 # Two-stage ranking in one query:
 # 1) text_stage: rank by text-only score (semantic + FTS), limit candidates
@@ -21,6 +32,10 @@ WITH text_base AS (
         m.matter_id,
         m.client_name,
         m.matter_name,
+        m.matter_description,
+        m.practice_area,
+        m.matter_type,
+        m.related_keywords,
         (1 - (m.embedding <=> %s))::float AS semantic_score,
         COALESCE(ts_rank(m.search_vector, plainto_tsquery('english', %s)), 0)::float AS fts_score
     FROM matters m
@@ -33,6 +48,10 @@ text_stage AS (
         matter_id,
         client_name,
         matter_name,
+        matter_description,
+        practice_area,
+        matter_type,
+        related_keywords,
         semantic_score,
         fts_score,
         (0.7 * semantic_score + 0.3 * LEAST(1.0, fts_score * 5.0)) AS text_score
@@ -57,8 +76,15 @@ joined AS (
         t.matter_id,
         t.client_name,
         t.matter_name,
+        t.matter_description,
+        t.practice_area,
+        t.matter_type,
+        t.related_keywords,
         t.semantic_score,
         t.fts_score,
+        COALESCE(fa.accept_count, 0) AS accept_count,
+        COALESCE(fa.reject_count, 0) AS reject_count,
+        fa.last_event_at,
         -- affinity: only when there is enough history; otherwise neutral 0.5
         COALESCE(
             CASE
@@ -112,8 +138,15 @@ SELECT
     matter_id,
     client_name,
     matter_name,
+    matter_description,
+    practice_area,
+    matter_type,
+    related_keywords,
     semantic_score,
     fts_score,
+    accept_count,
+    reject_count,
+    last_event_at,
     affinity,
     recency,
     rejection_factor,
@@ -131,7 +164,7 @@ SELECT
     ) AS combined_score
 FROM joined
 ORDER BY combined_score DESC
-LIMIT 20
+LIMIT 10
 """
 
 
@@ -216,16 +249,111 @@ def get_suggestions_for_entry(entry: TimeEntry):
             matter_id=row[1],
             client_name=row[2],
             matter_name=row[3],
-            score=float(row[9]),
+            score=float(row[16]),
             rationale=_rationale(
-                semantic=float(row[4]),
-                fts=float(row[5]),
-                affinity=float(row[6]),
-                recency=float(row[7]),
+                semantic=float(row[8]),
+                fts=float(row[9]),
+                affinity=float(row[13]),
+                recency=float(row[14]),
             ),
+            rationale_source="template",
         )
         for row in rows
     ]
+
+    # Optional: replace template rationales with Ollama-generated rationales (best-effort).
+    cfg = get_ollama_config()
+    if cfg.enabled and suggestions:
+        try:
+            def _tokens(s: str) -> set[str]:
+                import re
+                # simple, deterministic tokenization for explanation only
+                return {t for t in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(t) >= 3}
+
+            narrative_terms = sorted(_tokens(narrative_clean))[:12]
+            candidates = [
+                {
+                    "client_id": r[0],
+                    "matter_id": r[1],
+                    "client_name": r[2],
+                    "matter_name": r[3],
+                    "matter_description": r[4] or "",
+                    "practice_area": r[5] or "",
+                    "matter_type": r[6] or "",
+                    "related_keywords": list(r[7] or []),
+                    "narrative_terms": narrative_terms,
+                    "keyword_overlap": sorted(
+                        _tokens(" ".join(list(r[7] or []))) & _tokens(narrative_clean)
+                    )[:10],
+                    # Provide both numeric signals and coarse bands so the model can
+                    # reference percentages but still speak naturally.
+                    "semantic_score": float(r[8]),  # 0..1
+                    "fts_score": float(r[9]),  # raw ts_rank (often small)
+                    "fts_norm": min(1.0, float(r[9]) * 5.0),  # normalized like ranking
+                    "accept_count": int(r[10]),
+                    "reject_count": int(r[11]),
+                    "no_prior_history": (int(r[10]) + int(r[11])) < 3,
+                    "affinity": float(r[13]),  # 0..1 (or neutral 0.5)
+                    "recency": float(r[14]),  # 0..1 (or neutral 0.5)
+                    "rejection_factor": float(r[15]),
+                    "combined_score": float(r[16]),
+                    "confidence_band": (
+                        "high"
+                        if float(r[16]) >= 0.75
+                        else ("medium" if float(r[16]) >= 0.55 else "low")
+                    ),
+                    "semantic_band": "high" if float(r[8]) >= 0.75 else ("medium" if float(r[8]) >= 0.5 else "low"),
+                    "keyword_band": (
+                        "high"
+                        if min(1.0, float(r[9]) * 5.0) >= 0.6
+                        else ("medium" if min(1.0, float(r[9]) * 5.0) >= 0.3 else "low")
+                    ),
+                }
+                for r in rows
+            ]
+            prompt = build_batch_prompt(
+                user_id=entry.user_id,
+                entry_id=entry.entry_id,
+                narrative=narrative_clean,
+                candidates=candidates,
+            )
+            debug = os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+            if debug:
+                logger.info(
+                    "Ollama rationale attempt (model=%s url=%s timeout_s=%s candidates=%d prompt_chars=%d)",
+                    cfg.model,
+                    cfg.base_url,
+                    cfg.timeout_s,
+                    len(candidates),
+                    len(prompt),
+                )
+            text = ollama_generate(
+                base_url=cfg.base_url,
+                model=cfg.model,
+                prompt=prompt,
+                timeout_s=cfg.timeout_s,
+            )
+            if debug:
+                logger.info("Ollama raw response (first 200 chars): %r", text[:200])
+            mapping = parse_rationales_json(text)
+            if debug:
+                logger.info("Ollama parsed rationales: %d", len(mapping))
+            for s in suggestions:
+                llm_r = mapping.get((s.client_id, s.matter_id))
+                if llm_r:
+                    s.rationale = llm_r
+                    s.rationale_source = "ollama"
+        except Exception as e:
+            # Keep template rationales on any failure (Ollama down, bad JSON, etc).
+            if os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+                logger.exception(
+                    "Ollama rationale fallback (model=%s url=%s timeout_s=%s): %s",
+                    cfg.model,
+                    cfg.base_url,
+                    cfg.timeout_s,
+                    e,
+                )
+            pass
 
     # Low-confidence heuristic: if the top suggestion is below threshold, warn.
     # This threshold is a starting point and should be tuned with real feedback.
