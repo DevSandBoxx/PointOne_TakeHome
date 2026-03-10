@@ -173,6 +173,22 @@ See `docs/MATTERS_INDEX.md` for more details on storage and rebuilds.
 
 ---
 
+This will:
+
+- `DROP TABLE IF EXISTS matters CASCADE;`
+- Recreate the table and indexes.
+- Seed from `data/matters.json`.
+
+You can also provide an explicit JSON path:
+
+```bash
+python -m app.seed_matters path/to/matters.json --rebuild
+```
+
+See `docs/MATTERS_INDEX.md` for more details on storage and rebuilds.
+
+---
+
 ## 6. Running the API + UI
 
 From the project root (conda env activated, DB up, `.env` set):
@@ -213,3 +229,49 @@ Key endpoints:
 
 - `POST /suggestions` – body: `TimeEntry`, response: `SuggestionsResponse` (`low_confidence` + `suggestions[]`).
 - `POST /feedback` – body: `FeedbackRequest` (user_id, entry_id, client_id, matter_id, action).
+
+---
+
+## 7. How scoring works (high level)
+
+For each time entry:
+
+1. Embed the narrative with `sentence-transformers/all-MiniLM-L6-v2`.
+2. **Stage 1 (text ranking)**:
+
+- Compute semantic score via pgvector (`embedding <=> narrative_embedding`).
+- Compute FTS score via PostgreSQL `ts_rank(search_vector, plainto_tsquery(...))`.
+- Filter to `status = 'open'`.
+- Rank by a text-only score and take top 50.
+
+3. **Stage 2 (personalization)**:
+
+- Join with feedback for this user to compute:
+  - Affinity (user × matter history, neutral when little/no history).
+  - Recency (how recently the user interacted with this matter, neutral when no history).
+  - Rejection factor (soft penalty when there is enough history; capped so it can’t fully wipe out good matches).
+- Combine semantic, FTS, affinity, recency, and rejection factor into a single `score` in [0, 1].
+
+4. **Low confidence**:
+
+- If the top score is below a threshold, the API sets `low_confidence = true` and the UI shows a warning.
+
+5. **Rationale**:
+
+- A template-based rationale builder converts the individual signals into a human-readable explanation (e.g. “Suggested because the narrative is highly similar to this matter and you worked on this matter recently.”).
+
+See `docs/SUGGESTIONS_SCORING.md` for the detailed SQL and weighting.
+
+---
+
+## 8. Feedback loop
+
+- UI calls `POST /feedback` on Accept/Reject.
+- Backend writes to a `feedback` table:
+- `user_id`, `entry_id`, `client_id`, `matter_id`, `action`, `created_at`.
+- Scoring uses this per user × matter to:
+- Compute **affinity** (how often the user accepted that matter).
+- Compute **recency** (how recent the last interaction was).
+- Apply a **soft rejection penalty** when there is enough evidence.
+
+This forms a **closed loop** where user behavior gradually adjusts rankings over time without retraining embeddings for every request.
