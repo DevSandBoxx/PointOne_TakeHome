@@ -16,6 +16,7 @@ STATIC_DIR = APP_ROOT / "static"
 from app.db import check_connection
 from app.schemas import SuggestionsResponse, TimeEntry
 from app.seed_matters import run_seed_matters_background
+from app.suggestions import get_suggestions_for_entry
 
 
 @asynccontextmanager
@@ -58,8 +59,8 @@ def get_suggestions(entry: TimeEntry) -> SuggestionsResponse:
     """
     Accept a time entry and return a ranked list of client/matter suggestions.
 
-    Each suggestion includes client name, matter name, a confidence score,
-    and an optional rationale.
+    Uses narrative embedding (sentence-transformers) and full-text search (tsvector)
+    in a single Postgres query; combines semantic and keyword scores.
     """
-    # Phase 1: no logic yet — return empty ranked list
-    return SuggestionsResponse(suggestions=[])
+    suggestions = get_suggestions_for_entry(entry.narrative)
+    return SuggestionsResponse(suggestions=suggestions)
