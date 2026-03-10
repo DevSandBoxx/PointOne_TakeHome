@@ -192,6 +192,12 @@ body {
   margin: 0;
 }
 
+.warning {
+  color: #fbbf24;
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
 .hidden {
   display: none !important;
 }

@@ -11,7 +11,7 @@
 /**
  * Fetch classification suggestions for a time entry (Phase 2: real API).
  * @param {Object} entry - Time entry payload (snake_case for API)
- * @returns {Promise<ClassificationSuggestion[]>}
+ * @returns {Promise<{ low_confidence: boolean, suggestions: ClassificationSuggestion[] }>}
  */
 async function getSuggestions(entry) {
   const res = await fetch("/suggestions", {
@@ -23,8 +23,7 @@ async function getSuggestions(entry) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  const data = await res.json();
-  return data.suggestions;
+  return res.json();
 }
 
 /**
@@ -174,14 +173,18 @@ function showError(message) {
   show($("suggestions-error"));
 }
 
-function showSuggestions(suggestions, entry) {
+function showSuggestions(result, entry) {
   hide($("suggestions-empty"));
   hide($("suggestions-loading"));
   hide($("suggestions-error"));
 
+  const low = $("suggestions-low-confidence");
+  if (result.low_confidence) show(low);
+  else hide(low);
+
   const list = $("suggestions-list");
   list.innerHTML = "";
-  suggestions.forEach((s, i) =>
+  result.suggestions.forEach((s, i) =>
     list.appendChild(renderSuggestion(s, i, entry)),
   );
   show(list);
@@ -195,8 +198,8 @@ async function onSubmit(e) {
 
   try {
     const entry = buildEntryPayload();
-    const suggestions = await getSuggestions(entry);
-    showSuggestions(suggestions, entry);
+    const result = await getSuggestions(entry);
+    showSuggestions(result, entry);
   } catch (err) {
     showError(err.message || "Failed to load suggestions.");
   } finally {
