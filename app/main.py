@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -15,8 +15,11 @@ STATIC_DIR = APP_ROOT / "static"
 
 from app.db import check_connection, record_feedback
 from app.schemas import FeedbackRequest, SuggestionsResponse, TimeEntry
+import os
+
+from app.llm_hydration import get_status, init_job, list_recent_keys, set_error, set_ready
 from app.seed_matters import run_seed_matters_background
-from app.suggestions import get_suggestions_for_entry
+from app.suggestions import generate_ollama_rationales_for_rows, get_suggestions_for_entry
 
 
 @asynccontextmanager
@@ -68,7 +71,7 @@ def post_feedback(feedback: FeedbackRequest):
 
 
 @app.post("/suggestions", response_model=SuggestionsResponse)
-def get_suggestions(entry: TimeEntry) -> SuggestionsResponse:
+def get_suggestions(entry: TimeEntry, background: BackgroundTasks) -> SuggestionsResponse:
     """
     Accept a time entry and return a ranked list of client/matter suggestions.
 
@@ -76,5 +79,41 @@ def get_suggestions(entry: TimeEntry) -> SuggestionsResponse:
     and user × matter feedback (affinity, recency, rejection penalty) in a single
     Postgres query; combines these into a single confidence score.
     """
-    suggestions, low_confidence = get_suggestions_for_entry(entry)
+    suggestions, low_confidence, rows = get_suggestions_for_entry(entry)
+
+    # Kick off async LLM hydration (best-effort). UI will poll /suggestions/llm.
+    init_job(entry.user_id, entry.entry_id)
+
+    def _hydrate():
+        try:
+            mapping = generate_ollama_rationales_for_rows(entry, rows)
+            set_ready(entry.user_id, entry.entry_id, mapping)
+        except Exception as e:
+            set_error(entry.user_id, entry.entry_id, str(e))
+
+    background.add_task(_hydrate)
     return SuggestionsResponse(low_confidence=low_confidence, suggestions=suggestions)
+
+
+@app.get("/suggestions/llm")
+def get_llm_rationales(
+    user_id: str = Query(...),
+    entry_id: str = Query(...),
+):
+    """
+    Poll LLM hydration results for a given (user_id, entry_id).
+    """
+    res = get_status(user_id, entry_id)
+    if res is None:
+        out = {"status": "missing", "rationales": []}
+        if os.getenv("OLLAMA_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+            out["recent_keys"] = [{"user_id": u, "entry_id": e} for (u, e) in list_recent_keys()]
+        return out
+    return {
+        "status": res.status,
+        "error": res.error,
+        "rationales": [
+            {"client_id": cid, "matter_id": mid, "llm_rationale": txt}
+            for (cid, mid), txt in res.rationales.items()
+        ],
+    }
