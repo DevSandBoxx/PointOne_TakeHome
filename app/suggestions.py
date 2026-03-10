@@ -11,6 +11,8 @@ from app.schemas import Suggestion
 # %s order: embedding, narrative, embedding, narrative.
 SUGGESTIONS_QUERY = """
 SELECT
+    client_id,
+    matter_id,
     client_name,
     matter_name,
     (1 - (embedding <=> %s))::float AS semantic_score,
@@ -59,10 +61,12 @@ def get_suggestions_for_entry(narrative: str):
 
     return [
         Suggestion(
-            client_name=row[0],
-            matter_name=row[1],
-            score=_combined_score(row[2], row[3]),
-            rationale=_rationale(row[2], row[3]),
+            client_id=row[0],
+            matter_id=row[1],
+            client_name=row[2],
+            matter_name=row[3],
+            score=_combined_score(row[4], row[5]),
+            rationale=_rationale(row[4], row[5]),
         )
         for row in rows
     ]

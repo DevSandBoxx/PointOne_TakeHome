@@ -19,6 +19,8 @@ class TimeEntry(BaseModel):
 class Suggestion(BaseModel):
     """A single client/matter suggestion with score and optional rationale."""
 
+    client_id: str = Field(..., description="Client ID (for feedback)")
+    matter_id: str = Field(..., description="Matter ID (for feedback)")
     client_name: str = Field(..., description="The suggested client")
     matter_name: str = Field(..., description="The suggested matter")
     score: float = Field(..., ge=0, le=1, description="Confidence of the match (0–1)")

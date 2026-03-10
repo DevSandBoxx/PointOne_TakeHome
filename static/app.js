@@ -4,8 +4,8 @@
  */
 
 /**
- * Classification suggestion (matches backend Suggestion schema: client_name, matter_name, score, rationale).
- * @typedef {{ client_name: string, matter_name: string, score: number, rationale?: string }} ClassificationSuggestion
+ * Classification suggestion (matches backend Suggestion schema).
+ * @typedef {{ client_id: string, matter_id: string, client_name: string, matter_name: string, score: number, rationale?: string }} ClassificationSuggestion
  */
 
 /**
@@ -27,6 +27,23 @@ async function getSuggestions(entry) {
   return data.suggestions;
 }
 
+/**
+ * POST feedback (accept/reject) for a suggestion.
+ * @param {{ user_id: string, entry_id: string, client_id: string, matter_id: string, action: 'accepted'|'rejected' }} payload
+ */
+async function postFeedback(payload) {
+  const res = await fetch('/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Feedback failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -46,13 +63,18 @@ function formatScore(score) {
 /**
  * @param {ClassificationSuggestion} suggestion
  * @param {number} index
+ * @param {{ user_id: string, entry_id: string }} entry
  * @returns {HTMLLIElement}
  */
-function renderSuggestion(suggestion, index) {
+function renderSuggestion(suggestion, index, entry) {
   const li = document.createElement('li');
   li.className = 'suggestion-item';
   li.setAttribute('role', 'listitem');
   li.dataset.index = String(index);
+  li.dataset.clientId = suggestion.client_id;
+  li.dataset.matterId = suggestion.matter_id;
+  li.dataset.userId = entry.user_id;
+  li.dataset.entryId = entry.entry_id;
 
   const clientMatter = `${suggestion.client_name} — ${suggestion.matter_name}`;
   li.innerHTML = `
@@ -82,7 +104,19 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function setFeedback(itemEl, status) {
+async function setFeedback(itemEl, status) {
+  const user_id = itemEl.dataset.userId;
+  const entry_id = itemEl.dataset.entryId;
+  const client_id = itemEl.dataset.clientId;
+  const matter_id = itemEl.dataset.matterId;
+
+  try {
+    await postFeedback({ user_id, entry_id, client_id, matter_id, action: status });
+  } catch (err) {
+    console.error('Failed to record feedback:', err);
+    return;
+  }
+
   itemEl.classList.remove('accepted', 'rejected');
   itemEl.classList.add(status);
   const actions = itemEl.querySelector('.suggestion-actions');
@@ -134,14 +168,14 @@ function showError(message) {
   show($('suggestions-error'));
 }
 
-function showSuggestions(suggestions) {
+function showSuggestions(suggestions, entry) {
   hide($('suggestions-empty'));
   hide($('suggestions-loading'));
   hide($('suggestions-error'));
 
   const list = $('suggestions-list');
   list.innerHTML = '';
-  suggestions.forEach((s, i) => list.appendChild(renderSuggestion(s, i)));
+  suggestions.forEach((s, i) => list.appendChild(renderSuggestion(s, i, entry)));
   show(list);
 }
 
@@ -154,7 +188,7 @@ async function onSubmit(e) {
   try {
     const entry = buildEntryPayload();
     const suggestions = await getSuggestions(entry);
-    showSuggestions(suggestions);
+    showSuggestions(suggestions, entry);
   } catch (err) {
     showError(err.message || 'Failed to load suggestions.');
   } finally {
