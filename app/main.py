@@ -21,7 +21,7 @@ from app.suggestions import get_suggestions_for_entry
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ensure DB connection and pgvector are available; then seed matters in background."""
+    """Ensure DB connection, pgvector, and feedback table; then seed matters in background."""
     check_connection()
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, run_seed_matters_background)

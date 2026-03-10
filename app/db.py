@@ -38,3 +38,23 @@ def check_connection() -> None:
         register_vector(conn)
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
+    ensure_feedback_table()
+
+
+def ensure_feedback_table() -> None:
+    """Create the feedback table if it does not exist (accept/reject suggestion events)."""
+    url = get_database_url()
+    with psycopg.connect(url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    entry_id TEXT NOT NULL,
+                    client_id TEXT NOT NULL,
+                    matter_id TEXT NOT NULL,
+                    action TEXT NOT NULL CHECK (action IN ('accepted', 'rejected')),
+                    created_at TIMESTAMPTZ DEFAULT now()
+                )
+            """)
+        conn.commit()
