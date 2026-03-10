@@ -1,18 +1,29 @@
+import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
+# Project root (parent of app/)
+APP_ROOT = Path(__file__).resolve().parent.parent
+STATIC_DIR = APP_ROOT / "static"
+
 from app.db import check_connection
 from app.schemas import SuggestionsResponse, TimeEntry
+from app.seed_matters import run_seed_matters_background
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ensure DB connection and pgvector are available before accepting requests."""
+    """Ensure DB connection and pgvector are available; then seed matters in background."""
     check_connection()
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, run_seed_matters_background)
     yield
 
 
@@ -23,9 +34,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Static assets (CSS, JS)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def serve_ui():
+    """Serve the time entry / classification suggestions UI."""
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        return {"message": "UI not found", "path": str(index_path)}
+    return FileResponse(index_path)
 
 
 @app.get("/health")
