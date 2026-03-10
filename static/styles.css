@@ -258,6 +258,54 @@ body {
   margin: 0;
 }
 
+.llm-block {
+  padding-top: 0.25rem;
+}
+
+.llm-header {
+  font-size: 0.8125rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.llm-text {
+  font-size: 0.875rem;
+  color: var(--text);
+  opacity: 0.92;
+  line-height: 1.4;
+}
+
+.llm-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+.skeleton-line:nth-child(2) {
+  width: 70%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .suggestion-rationale {
   font-size: 0.875rem;
   color: var(--text-muted);

@@ -5,7 +5,7 @@
 
 /**
  * Classification suggestion (matches backend Suggestion schema).
- * @typedef {{ client_id: string, matter_id: string, client_name: string, matter_name: string, score: number, rationale?: string, rationale_source?: 'template'|'ollama' }} ClassificationSuggestion
+ * @typedef {{ client_id: string, matter_id: string, client_name: string, matter_name: string, score: number, semantic_score: number, keyword_score: number, affinity: number, recency: number, rationale?: string, llm_rationale?: string, llm_status?: 'disabled'|'pending'|'ready'|'error' }} ClassificationSuggestion
  */
 
 /**
@@ -47,6 +47,12 @@ function $(id) {
   return document.getElementById(id);
 }
 
+// Cancel / supersede in-flight LLM polling when user resubmits.
+let _llmPoll = {
+  token: 0,
+  controller: null,
+};
+
 function show(el) {
   el.classList.remove("hidden");
 }
@@ -57,6 +63,18 @@ function hide(el) {
 
 function formatScore(score) {
   return `${Math.round(score * 100)}%`;
+}
+
+function formatPct01(x) {
+  return `${Math.round((x || 0) * 100)}%`;
+}
+
+function renderRichText(text) {
+  // Minimal rich text: escape then support **bold** and newlines.
+  const escaped = escapeHtml(text || "");
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br />");
 }
 
 /**
@@ -76,15 +94,25 @@ function renderSuggestion(suggestion, index, entry) {
   li.dataset.entryId = entry.entry_id;
 
   const clientMatter = `${suggestion.client_name} — ${suggestion.matter_name}`;
-  const source =
-    suggestion.rationale_source === "ollama" ? "Ollama" : "Template";
   li.innerHTML = `
     <div class="suggestion-header">
       <span class="suggestion-client-matter">${escapeHtml(clientMatter)}</span>
       <span class="suggestion-score">${formatScore(suggestion.score)}</span>
     </div>
-    <div class="suggestion-meta muted">Rationale: ${escapeHtml(source)}</div>
+    <div class="suggestion-meta muted">
+      Semantic: ${formatPct01(suggestion.semantic_score)} · Keywords: ${formatPct01(suggestion.keyword_score)}
+      · Affinity: ${formatPct01(suggestion.affinity)} · Recency: ${formatPct01(suggestion.recency)}
+    </div>
     ${suggestion.rationale ? `<p class="suggestion-rationale">${escapeHtml(suggestion.rationale)}</p>` : ""}
+    <div class="llm-block" data-llm>
+      <div class="llm-header muted">LLM interpretation</div>
+      <div class="llm-loading" data-llm-loading>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+      </div>
+      <div class="llm-text hidden" data-llm-text></div>
+      <div class="llm-error hidden error" data-llm-error></div>
+    </div>
     <div class="suggestion-actions">
       <button type="button" class="btn btn-sm btn-accept" data-action="accept">Accept</button>
       <button type="button" class="btn btn-sm btn-reject" data-action="reject">Reject</button>
@@ -191,6 +219,88 @@ function showSuggestions(result, entry) {
     list.appendChild(renderSuggestion(s, i, entry)),
   );
   show(list);
+
+  // Start async LLM hydration after initial render.
+  hydrateLlms(entry, result.suggestions, _llmPoll.token, _llmPoll.controller);
+}
+
+async function fetchLlms(user_id, entry_id, signal) {
+  const url = `/suggestions/llm?user_id=${encodeURIComponent(user_id)}&entry_id=${encodeURIComponent(entry_id)}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`LLM poll failed: ${res.status}`);
+  return res.json();
+}
+
+function applyLlmsToDom(entry, mapping) {
+  const items = $("suggestions-list").querySelectorAll(".suggestion-item");
+  items.forEach((li) => {
+    const key = `${li.dataset.clientId}::${li.dataset.matterId}`;
+    const llm = mapping[key];
+    const loading = li.querySelector("[data-llm-loading]");
+    const text = li.querySelector("[data-llm-text]");
+    const err = li.querySelector("[data-llm-error]");
+    if (!loading || !text || !err) return;
+    if (llm && llm.llm_rationale) {
+      loading.classList.add("hidden");
+      err.classList.add("hidden");
+      text.classList.remove("hidden");
+      text.innerHTML = renderRichText(llm.llm_rationale);
+    }
+  });
+}
+
+async function hydrateLlms(entry, suggestions, token, controller) {
+  // If LLM is disabled, hide loaders.
+  const anyPending = suggestions.some((s) => s.llm_status === "pending");
+  if (!anyPending) {
+    const items = $("suggestions-list").querySelectorAll("[data-llm-loading]");
+    items.forEach((el) => el.classList.add("hidden"));
+    return;
+  }
+
+  const start = Date.now();
+  // Ollama can easily take 20s+ on first load / CPU. Give it more time.
+  const timeoutMs = 60000;
+  const intervalMs = 1000;
+
+  while (Date.now() - start < timeoutMs) {
+    if (_llmPoll.token !== token) return; // superseded by a new submit
+    let data;
+    try {
+      data = await fetchLlms(entry.user_id, entry.entry_id, controller?.signal);
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      // keep showing skeleton; try again
+      await new Promise((r) => setTimeout(r, intervalMs));
+      continue;
+    }
+
+    if (data.status === "ready") {
+      const mapping = {};
+      (data.rationales || []).forEach((r) => {
+        mapping[`${r.client_id}::${r.matter_id}`] = r;
+      });
+      applyLlmsToDom(entry, mapping);
+      return;
+    }
+
+    if (data.status === "error") {
+      const items = $("suggestions-list").querySelectorAll(".suggestion-item");
+      items.forEach((li) => {
+        const loading = li.querySelector("[data-llm-loading]");
+        const err = li.querySelector("[data-llm-error]");
+        if (!loading || !err) return;
+        loading.classList.add("hidden");
+        err.classList.remove("hidden");
+        err.textContent = "LLM interpretation failed to load.";
+      });
+      return;
+    }
+
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  // Timed out: keep skeleton visible; user can resubmit or wait longer.
 }
 
 async function onSubmit(e) {
@@ -200,6 +310,11 @@ async function onSubmit(e) {
   showLoading();
 
   try {
+    // Cancel any previous polling loop + request.
+    _llmPoll.token += 1;
+    if (_llmPoll.controller) _llmPoll.controller.abort();
+    _llmPoll.controller = new AbortController();
+
     const entry = buildEntryPayload();
     const result = await getSuggestions(entry);
     showSuggestions(result, entry);
