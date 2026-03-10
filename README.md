@@ -46,6 +46,7 @@ This installs:
 - `pgvector` – pgvector type support for psycopg
 - `python-dotenv` – load `.env`
 - `sentence-transformers` – embedding model (`all-MiniLM-L6-v2`)
+- `pytest`, `pytest-asyncio`, `httpx`, `pytest-cov` – for the test suite
 
 ---
 
@@ -173,22 +174,6 @@ See `docs/MATTERS_INDEX.md` for more details on storage and rebuilds.
 
 ---
 
-This will:
-
-- `DROP TABLE IF EXISTS matters CASCADE;`
-- Recreate the table and indexes.
-- Seed from `data/matters.json`.
-
-You can also provide an explicit JSON path:
-
-```bash
-python -m app.seed_matters path/to/matters.json --rebuild
-```
-
-See `docs/MATTERS_INDEX.md` for more details on storage and rebuilds.
-
----
-
 ## 6. Running the API + UI
 
 From the project root (conda env activated, DB up, `.env` set):
@@ -275,3 +260,23 @@ See `docs/SUGGESTIONS_SCORING.md` for the detailed SQL and weighting.
 - Apply a **soft rejection penalty** when there is enough evidence.
 
 This forms a **closed loop** where user behavior gradually adjusts rankings over time without retraining embeddings for every request.
+
+---
+
+## 9. Testing
+
+From the project root (with the conda env activated and dependencies installed):
+
+```bash
+python -m pytest tests/ -v
+```
+
+- **Unit tests** cover schemas, embedding (dimension, empty input), rationale builder, seed_matters helpers (`_get`, `_get_list`, `_normalize_row`, `load_matters_json`), and `get_database_url`.
+- **API tests** use FastAPI’s `TestClient` with mocked DB and suggestions so no real Postgres is required for the suite.
+- **Optional integration tests** in `tests/test_db.py` (ensure feedback table, record feedback) are skipped unless `DATABASE_URL` points at a real database (i.e. not the default test placeholder). Run with a real DB URL to exercise them.
+
+Coverage report:
+
+```bash
+python -m pytest tests/ -v --cov=app --cov-report=term-missing
+```
